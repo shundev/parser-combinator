@@ -31,4 +31,37 @@ abstract class MyFirstCombinator {
       case Failure => Failure
     }
   }
+
+  def oneOf(chars: Seq[Char]): Parser[String] = input => {
+    if(input.length != 0 && chars.contains(input.head)) {
+      Success(input.head.toString, input.tail)
+    } else {
+      Failure
+    }
+  }
+
+  def rep[T](parser: Parser[T]): Parser[List[T]] = input => {
+    def rec(input: String): (List[T], String) = parser(input) match {
+        case Success(value, next1) =>
+          val (result, next2) = rec(next1)
+          (value::result, next2)
+        case Failure =>
+          (Nil, input)
+      }
+
+    val (result, next) = rec(input)
+    Success(result, next)
+  }
+
+  def combine[T, U](left: Parser[T], right: Parser[U]): Parser[(T, U)] = input => {
+    left(input) match {
+      case Success(value1, next1) =>
+        right(next1) match {
+          case Success(value2, next2) =>
+            Success((value1, value2), next2)
+          case Failure => Failure
+        }
+      case Failure => Failure
+    }
+  }
 }
