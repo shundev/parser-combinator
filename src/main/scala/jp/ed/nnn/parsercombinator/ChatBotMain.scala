@@ -5,7 +5,7 @@ import scala.io.Source
 
 
 object ChatBotMain extends App {
-  val text = Source.fromFile("./src/main/scala/jp/ed/nnn/parsercombinator/chatbot.cb").mkString
+  val text = Source.fromFile("./chatbot.cb").mkString
   val chatBot: ChatBot = ChatBotTextParser(text) match {
     case ChatBotTextParser.Success(result, _) => result
     case failure: ChatBotTextParser.NoSuccess => scala.sys.error(failure.toString)
