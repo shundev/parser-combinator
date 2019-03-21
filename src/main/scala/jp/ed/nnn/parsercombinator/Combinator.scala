@@ -15,17 +15,78 @@ abstract class Combinator {
     }
   }
 
+
+
   def s(literal: String): Parser[String] = string(literal)
 
+  def ss(str: String): Parser[String] = s(str) <~ spacing
+
+  val floatingPointNumber: Parser[String] = input => {
+    val r = """^(-?\d+(\.\d*)?|\d*\.\d+)([eE][+-]?\d+)?[fFdD]?""".r
+    val matchIterator = r.findAllIn(input).matchData
+      if(matchIterator.hasNext) {
+        val next = matchIterator.next()
+        val all = next.group(0)
+        val target = next.group(1)
+        Success(target, input.substring(all.length))
+      } else {
+        Failure
+      }
+  }
+
+  val stringLiteral: Parser[String] = input =>  {
+    val r = ("^\"("+"""([^"\p{Cntrl}\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*+"""+")\"").r
+    val matchIterator = r.findAllIn(input).matchData
+    if(matchIterator.hasNext) {
+      val next = matchIterator.next()
+      val all = next.group(0)
+      val target = next.group(1)
+      Success(target, input.substring(all.length))
+    } else {
+      Failure
+    }
+  }
+
+  def rep[T](parser: => Parser[T]): Parser[List[T]] = input => {
+    def repeatRec(input: String): (List[T], String) = parser(input) match {
+      case Success(value, next1) =>
+        val (result, next2) = repeatRec(next1)
+        (value::result, next2)
+      case Failure =>
+        (Nil, input)
+    }
+
+    val (result, next) = repeatRec(input)
+    Success(result, next)
+  }
+
+  def rep1sep[T](parser: => Parser[T], sep: Parser[String]): Parser[List[T]] =
+    parser ~ rep(sep ~> parser) ^^ { t => t._1 :: t._2 }
+
+  def success[T](value: T): Parser[T] = input => Success(value, input)
+
+  def repsep[T](parser: => Parser[T], sep: Parser[String]): Parser[List[T]] =
+    rep1sep(parser, sep) | success(List())
+
+  def oneOf(chars: Seq[Char]): Parser[String] = input => {
+    if(input.length != 0 && chars.contains(input.head)) {
+      Success(input.head.toString, input.tail)
+    } else {
+      Failure
+    }
+  }
+
+  def spacing: Parser[String] = rep(oneOf(Seq(' ', '\t', '\r', '\n'))) ^^ { _.mkString}
+
   implicit class RichParser[T](val parser: Parser[T]) {
-    def |[U >: T](right: Parser[U]): Parser[U] = input => {
+    def |[U >: T](right: => Parser[U]): Parser[U] = input => {
       parser(input) match {
         case success@Success(_, _) => success
         case Failure => right(input)
       }
     }
 
-    def ~[U](right: Parser[U]): Parser[(T, U)] = input => {
+    def ~[U](right: => Parser[U]): Parser[(T, U)] = input => {
       parser(input) match {
         case Success(value1, next1) =>
           right(next1) match {
@@ -34,6 +95,41 @@ abstract class Combinator {
             case Failure => Failure
           }
         case Failure => Failure
+      }
+    }
+
+    def ^^[U](function: T => U): Parser[U] = input => {
+      parser(input) match {
+        case Success(value, next) => Success(function(value), next)
+        case Failure => Failure
+      }
+    }
+
+    def <~(right: => Parser[Any]): Parser[T] = input => {
+      parser(input) match {
+        case Success(value1, next1) =>
+          right(next1) match {
+            case Success(_, next2) =>
+              Success(value1, next2)
+            case Failure =>
+              Failure
+          }
+        case Failure =>
+          Failure
+      }
+    }
+
+    def ~>[U](right: => Parser[U]): Parser[U] = input => {
+      parser(input) match {
+        case Success(value1, next1) =>
+          right(next1) match {
+            case Success(value2, next2) =>
+              Success(value2, next2)
+            case Failure =>
+              Failure
+          }
+        case Failure =>
+          Failure
       }
     }
   }
